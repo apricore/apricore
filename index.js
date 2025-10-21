@@ -53,11 +53,23 @@ app.get("*", (req, res) => {
       res.sendFile(location);
     break;
     case "md":
-      res.writeHead(200, {
-        "Content-Type": "text/html",
-        'Access-Control-Allow-Origin': '*'
-      });
-      res.end(marked(buf.toString()));
+      res.status(200).send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: Arial, sans-serif; padding: 2rem; line-height: 1.6; }
+            pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; }
+            code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 3px; }
+          </style>
+        </head>
+        <body>
+          ${marked(buf.toString())}
+        </body>
+        </html>
+      `);
     break;
     default:
       res.end(buf.toString());

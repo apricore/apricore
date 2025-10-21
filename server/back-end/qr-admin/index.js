@@ -1,7 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const AdmZip = require("adm-zip");
-const { ChangeSet, Text, rebaseUpdates } = require("../_m");
+const { ChangeSet, Text } = require("@codemirror/state");
+const { rebaseUpdates } = require("@codemirror/collab");
 const isWin32 = process.platform === "win32";
 
 if (isWin32) {
@@ -30,6 +31,21 @@ if (isWin32) {
     console.log(error);
     process.exit();
   });
+  if (typeof Promise.withResolvers !== "function") {
+    Object.defineProperty(Promise, "withResolvers", {
+      value: function () {
+        var res, rej;
+        var p = new Promise(function (resolve, reject) {
+          res = resolve;
+          rej = reject;
+        });
+        return { promise: p, resolve: res, reject: rej };
+      },
+      configurable: true,
+      writable: true,
+      enumerable: false,
+    });
+  }
 }
 
 const recycleSet = new Set;

@@ -2,7 +2,7 @@ import {
   createExtensions,
   EditorView, ViewPlugin,
   languages, oneDark, oneLight,
-  ChangeSet, Compartment, EditorState,
+  ChangeSet, Compartment, EditorState, toggleMinimap,
   collab, getSyncedVersion, receiveUpdates, sendableUpdates
 } from "/_m/index.js";
 
@@ -2192,7 +2192,7 @@ const topNav = create("nav", {class: "top-nav"}, topNav => {
         mainContainer.refreshFrame();
         runFile(activePage);
       } else if (key === "enter") {
-        event.preventDefault();
+        if (event.shiftKey) return;
         if (activePage) activePage.save();
         if (
           type === "c" || 
@@ -2214,6 +2214,11 @@ const topNav = create("nav", {class: "top-nav"}, topNav => {
         termContainer.termWindow?.clear();
       } else if (key === "w") {
         event.preventDefault();
+      } else if (key === "m") {
+        mainContainer.recordSetting({minimap: !mainContainer.setting.minimap});
+        activePage?.viewer.toggleMinimap?.(mainContainer.setting.minimap);
+      } else if (key === "b") {
+        sideNav.querySelector(".nav-toggle").click();
       }
     }
   }, true);
@@ -2648,11 +2653,13 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
 
       viewer.retheme = isDark => {
         if (isDark) {
-          view.dispatch({effects: themeConf.reconfigure(oneDark)});
           viewer.isDark = true;
+          view.dispatch({effects: themeConf.reconfigure(oneDark)});
+          view.focus();
         } else {
-          view.dispatch({effects: themeConf.reconfigure(oneLight)});
           viewer.isDark = false;
+          view.dispatch({effects: themeConf.reconfigure(oneLight)});
+          view.focus();
         }
       };
       viewer.remode = mode => {
@@ -2665,6 +2672,12 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
           effects: languageConf.reconfigure(language)
         });
       };
+      viewer.toggleMinimap = on => {
+        if (viewer.isMinimapOn === on) return;
+        toggleMinimap(view, on);
+        viewer.isMinimapOn = on;
+      };
+      if (mainContainer.setting.minimap) viewer.toggleMinimap(true);
 
       viewer.classList.add("editor");
       viewer.view = view;
@@ -2716,6 +2729,8 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
         delete viewer.retheme;
         delete viewer.remode;
         delete viewer.isDark;
+        delete viewer.toggleMinimap;
+        delete viewer.isMinimapOn;
         delete this.plugin;
         delete this.iframe;
       }
@@ -2729,7 +2744,7 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
         inode: this.inode
       }).then(result => {
         var { version, doc } = JSON.parse(result),
-            extensions = createExtensions(peerExtension(version, page)),
+            extensions = createExtensions(peerExtension(version, this)),
             language = languages[this.type],
             languageConf = new Compartment,
             themeConf = new Compartment;
@@ -2759,11 +2774,13 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
 
         viewer.retheme = isDark => {
           if (isDark) {
+            viewer.isDark = true;
             view.dispatch({effects: themeConf.reconfigure(oneDark)});
-            parent.isDark = true;
+            view.focus();
           } else {
+            viewer.isDark = false;
             view.dispatch({effects: themeConf.reconfigure(oneLight)});
-            parent.isDark = false;
+            view.focus();
           }
         };
         viewer.remode = mode => {
@@ -2776,6 +2793,12 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
             effects: languageConf.reconfigure(language)
           });
         };
+        viewer.toggleMinimap = on => {
+          if (viewer.isMinimapOn === on) return;
+          toggleMinimap(view, on);
+          viewer.isMinimapOn = on;
+        };
+        if (mainContainer.setting.minimap) viewer.toggleMinimap(true);
 
         viewer.view = view;
         viewer.state = state;
@@ -2851,6 +2874,8 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
         } else {
           if (viewer.isDark) viewer.retheme?.(false);
         }
+        if (mainContainer.setting.minimap) viewer.toggleMinimap?.(true);
+        else viewer.toggleMinimap?.(false);
         editorWrapper.querySelector(".active")?.classList.remove("active");
         viewer.classList.add("active");
         if (!sideNav.contains(document.activeElement)) setTimeout(() => {
@@ -2932,10 +2957,11 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
 
   let setting, lockedFrame;
 
-  mainContainer.recordSetting = ({theme, preview, address} = {}) => {
+  mainContainer.recordSetting = ({theme, preview, address, minimap} = {}) => {
     setting.theme = theme ?? setting.theme;
     setting.preview = preview ?? setting.preview;
     setting.address = address ?? setting.address;
+    setting.minimap = minimap ?? setting.minimap;
 
     localStorage["--qr-setting"] = JSON.stringify(setting);
   };
@@ -2955,11 +2981,13 @@ const mainContainer = create("div", {class: "main-container"}, mainContainer => 
     setting = {
       theme: true,
       preview: true,
-      address: ""
+      address: "",
+      minimap: false
     }
     document.body.classList.add("dark");
     document.body.classList.add("preview-off");
   }
+  mainContainer.setting = setting;
 
   editorContainer.append(editorPanel, editorWrapper);
   frameContainer.append(iframePanel, iframeWrapper);
