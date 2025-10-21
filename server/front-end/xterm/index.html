@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Terminal</title>
+<link rel="stylesheet" href="lib/xterm.css">
+<style>
+* {
+  box-sizing: border-box;
+}
+:root {
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  height: 100%;
+  margin: 0px;
+}
+#terminal {
+  height: calc(100% - 12px);
+  width: calc(100% - 16px);
+  position: fixed;
+  top: 6px;
+  left: 8px;
+}
+.xterm-viewport {
+  background-color: transparent !important;
+}
+.xterm-viewport::-webkit-scrollbar {
+  background-color: transparent;
+}
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background-color: hsl(210, 33%, 62%, 0.75);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-left-width: 4px;
+  border-right-width: 0;
+}
+.xterm-dom-renderer-owner-1 .xterm-selection div {
+  background-color: hsl(210, 25%, 38%) !important;
+}
+.xterm-dom-renderer-owner-1.focus .xterm-selection div {
+  background-color: hsl(195, 62%, 38%) !important;
+}
+.xterm-fg-8 {
+  color: hsl(0, 0%, 75%) !important;
+}
+.xterm-decoration-top {
+  background: transparent !important;
+}
+</style>
+</head>
+<body>
+<div id="terminal"></div>
+<script type="module">
+import "./lib/xterm.js";
+import './addon/addon-attach.js';
+import './addon/addon-fit.js';
+import './addon/addon-web-links.js';
+let webSocket = new WebSocket(location.origin.replace("http", "ws") + location.pathname.slice(0, location.pathname.lastIndexOf("/") + 1) + "socketio.jsp");
+let term = new Terminal();
+let fitAddon = new FitAddon.FitAddon();
+term.options = {
+  lineHeight: 1.1,
+  fontSize: 14,
+  fontFamily: 'consolas, monospace'
+};
+term.loadAddon(new AttachAddon.AttachAddon(webSocket));
+term.loadAddon(new WebLinksAddon.WebLinksAddon());
+term.loadAddon(fitAddon);
+term.onResize(size => webSocket.send(JSON.stringify(size)));
+term.attachCustomKeyEventHandler(ev => {
+  if (!ev.ctrlKey) return true;
+  if (ev.code === "KeyC" && term.hasSelection()) {
+    setTimeout(() => term.clearSelection());
+    return false;
+  }
+  if (ev.code === "KeyV") return false;
+});
+webSocket.onopen = () => {
+  fitAddon.fit();
+  webSocket.send(JSON.stringify({cols: term._core.cols, rows: term._core.rows}));
+};
+webSocket.onclose = () => {
+  requestAnimationFrame(() => {
+    window.location.reload();
+  });
+};
+window.onresize = evet => fitAddon.fit();
+window.exec = data => {
+  webSocket.send(data + "\r");
+  if (term.hasSelection()) term.clearSelection();
+};
+window.clear = () => {
+  window.exec(String.fromCodePoint(23) + "clear");
+  term.clear();
+};
+window.quit = function () {
+  webSocket.send(String.fromCodePoint(3));
+  if (term.hasSelection()) term.clearSelection();
+};
+term.open(document.getElementById("terminal"));
+</script>
+</body>
+</html>
