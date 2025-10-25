@@ -1,6 +1,6 @@
-import { getIndentUnit } from "/_m/__/language/dist/index.js";
-import { Facet, combineConfig, RangeSetBuilder } from "/_m/__/state/dist/index.js";
-import { ViewPlugin, EditorView, Decoration } from "/_m/__/view/dist/index.js";
+import { getIndentUnit } from '@codemirror/language';
+import { Facet, combineConfig, RangeSetBuilder } from '@codemirror/state';
+import { ViewPlugin, EditorView, Decoration } from '@codemirror/view';
 
 /**
  * Gets the visible lines in the editor. Lines will not be repeated.

@@ -1,28 +1,27 @@
-import { html } from "/_m/__/lang-html/dist/index.js";
-import { css } from "/_m/__/lang-css/dist/index.js";
-import { javascript } from "/_m/__/lang-javascript/dist/index.js";
-import { json } from "/_m/__/lang-json/dist/index.js";
-import { php } from "/_m/__/lang-php/dist/index.js";
-import { sql } from "/_m/__/lang-sql/dist/index.js";
-import { xml } from "/_m/__/lang-xml/dist/index.js";
-import { cpp } from "/_m/__/lang-cpp/dist/index.js";
-import { python } from "/_m/__/lang-python/dist/index.js";
-import { java } from "/_m/__/lang-java/dist/index.js";
-import { markdown } from "/_m/__/lang-markdown/dist/index.js";
+import { html } from "@codemirror/lang-html";
+import { css } from "@codemirror/lang-css";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
+import { php } from "@codemirror/lang-php";
+import { sql } from "@codemirror/lang-sql";
+import { xml } from "@codemirror/lang-xml";
+import { cpp } from "@codemirror/lang-cpp";
+import { python } from "@codemirror/lang-python";
+import { java } from "@codemirror/lang-java";
+import { markdown } from "@codemirror/lang-markdown";
 
-import { basicSetup } from "/_m/__/codemirror/dist/index.js";
-import { searchPanelOpen, getSearchQuery } from "/_m/__/search/dist/index.js";
-import { redo, indentWithTab, insertNewline, insertBlankLine } from "/_m/__/commands/dist/index.js";
-import { EditorView, ViewPlugin, scrollPastEnd, keymap } from "/_m/__/view/dist/index.js";
-import { ChangeSet, Compartment, EditorState, Prec } from "/_m/__/state/dist/index.js";
-import { collab, getSyncedVersion, receiveUpdates, sendableUpdates } from "/_m/__/collab/dist/index.js";
+import { basicSetup } from "codemirror";
+import { redo, indentWithTab, insertNewline, insertBlankLine } from "@codemirror/commands";
+import { EditorView, ViewPlugin, scrollPastEnd, keymap } from "@codemirror/view";
+import { ChangeSet, Compartment, EditorState, Prec } from "@codemirror/state";
+import { collab, getSyncedVersion, receiveUpdates, sendableUpdates } from "@codemirror/collab";
 
-import { HighlightStyle, syntaxHighlighting, StreamLanguage, foldedRanges } from "/_m/__/language/dist/index.js";
-import { pug } from "/_m/__/legacy-modes/mode/pug.js";
-import { tags } from "/_m/__/node_modules/@lezer/highlight/dist/index.js";
+import { HighlightStyle, syntaxHighlighting, StreamLanguage } from "@codemirror/language";
+import { pug } from "@codemirror/legacy-modes/mode/pug";
+import { tags } from "@lezer/highlight";
 
-import { showMinimap  } from "/_m/@replit/codemirror-minimap.js";
-import { indentationMarkers } from '/_m/@replit/codemirror-indentation-markers.js';
+import { showMinimap  } from "./@replit/codemirror-minimap.js";
+import { indentationMarkers } from './@replit/codemirror-indentation-markers.js';
 
 const darkTheme = EditorView.theme({
   "&": {
@@ -145,6 +144,18 @@ const darkTheme = EditorView.theme({
   .cm-selectionBackground, .cm-content ::selection": {
     "background-color": "hsl(195, 62%, 25%)",
     "outline-color": "hsl(195, 62%, 25%)"
+  },
+  ".cm-minimapOccurrenceBackground": {
+    "background-color": "hsla(210, 0%, 100%, 0.62)"
+  },
+  ".cm-minimapSearchBackground": {
+    "background-color": "hsla(60, 100%, 50%, 0.75)"
+  },
+  ".cm-minimapSelectionBackground": {
+    "background-color": "hsl(180, 50%, 50%)"
+  },
+  ".cm-minimapSearchSelectionBackground": {
+    "background-color": "hsl(30, 100%, 50%)"
   },
 
   ".cm-panels": {
@@ -378,6 +389,18 @@ const lightTheme = EditorView.theme({
     "background-color": "hsl(240, 38%, 88%)",
     "outline-color": "hsl(240, 38%, 88%)"
   },
+  ".cm-minimapOccurrenceBackground": {
+    "background-color": "hsla(180, 75%, 50%, 0.5)"
+  },
+  ".cm-minimapSearchBackground": {
+    "background-color": "hsla(270, 100%, 38%, 0.5)"
+  },
+  ".cm-minimapSelectionBackground": {
+    "background-color": "hsl(270, 50%, 68%)"
+  },
+  ".cm-minimapSearchSelectionBackground": {
+    "background-color": "hsl(330, 100%, 50%)"
+  },
 
   ".cm-panels": {
     "backgroundColor": "hsl(210, 25%, 95%)"
@@ -481,35 +504,6 @@ const indentationMarkersExtension = indentationMarkers({
   }
 });
 
-// --- utility to find line numbers matching a string ---
-function findMatchingLines(view, pattern, includeFolded = false) {
-  if (!pattern) return [];
-
-  const doc = view.state.doc;
-  const matches = [];
-  const folds = foldedRanges(view.state);
-  const regex = pattern instanceof RegExp ? pattern : new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-
-  if (includeFolded) {
-    for (let i = 1; i <= doc.lines; i++) {
-      const line = doc.line(i);
-      if (regex.test(line.text)) matches.push(i);
-    }
-  } else {
-    for (let pos = 0, i = 1;; i++) {
-      const block = view.lineBlockAt(pos);
-      const line = doc.lineAt(block.from);
-      if (regex.test(line.text)) matches.push(i);
-      else folds.between(block.from, block.to, (from, to) => {
-        if (regex.test(doc.sliceString(from, to))) matches.push(i);
-      });
-      if (block.to >= doc.length) break;
-      pos = block.to + 1;
-    }
-  }
-  return matches;
-}
-
 // Fold-aware active line number (visual index)
 function getVisibleLineIndex(view, pos = view.state.selection.main.head) {
   const block = view.lineBlockAt(pos);
@@ -521,53 +515,22 @@ function getVisibleLineIndex(view, pos = view.state.selection.main.head) {
   }
 }
 
-function getSearchMatchLines(view, searchQuery) {
-  let pattern = searchQuery.search, escaped;
-  if (!pattern) return [];
-  if (searchQuery.regexp || searchQuery.wholeWord || !searchQuery.caseSensitive) {
-    if (searchQuery.wholeWord) pattern = `\\b${pattern}\\b`;
-    if (searchQuery.regexp) escaped = pattern.replace(/\\/g, "\\\\");
-    else escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (searchQuery.caseSensitive) pattern = new RegExp(escaped);
-    else pattern = new RegExp(escaped, "i");
-  }
-  return findMatchingLines(view, pattern);
-}
-
-let isUpdating = false
-function refreshMinimap(view) {
-  if (isUpdating) return
-  isUpdating = true
-  const selection = view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)
-  const searchQuery = getSearchQuery(view.state)
-  const selectionLines = findMatchingLines(view, selection)
-  const searchLines = searchPanelOpen(view.state) ? getSearchMatchLines(view, searchQuery) : []
-  const activeLineNumber = getVisibleLineIndex(view)
-  const drawBlock = (lineNum, color) => {
-    if (activeLineNumber === lineNum) view.minimap.gutters[lineNum] = "red";
-    else view.minimap.gutters[lineNum] = color;
-  }
-  view.minimap.gutters = {};
-  if (view.dom.parentNode.isDark) view.minimap.gutters[activeLineNumber] = "white";
-  else view.minimap.gutters[activeLineNumber] = "black";
-  selectionLines.forEach((n) => drawBlock(n, "hsl(60, 0%, 62%)"))
-  searchLines.forEach((n) => drawBlock(n, "hsl(45, 50%, 62%)"))
-  view.minimap.render();
-  isUpdating = false
-}
-
 const minimapCompartment = new Compartment();
 const minimapExtArr = [
   showMinimap.compute(["doc"], (state) => ({
     create(view) {
       const dom = document.createElement("div");
+      queueMicrotask(() => view.minimap.render())
       return { dom };
     },
     showOverlay: "mouse-over"
   })),
   EditorView.updateListener.of((update) => {
     if (!update.docChanged && !update.selectionSet && !update.transactions.some(tr => tr.annotation)) return
-    refreshMinimap(update.view)
+    const view = update.view;
+    const activeLineNumber = getVisibleLineIndex(view)
+    if (view.dom.parentNode.isDark) view.minimap.gutters = {[activeLineNumber]: "white"};
+    else view.minimap.gutters = {[activeLineNumber]: "black"};
   }),
 ];
 const minimapExtension = minimapCompartment.of([]);

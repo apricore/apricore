@@ -1,10 +1,11 @@
-import { Facet, combineConfig, StateField } from "/_m/__/state/dist/index.js";
-import { EditorView, ViewPlugin } from "/_m/__/view/dist/index.js";
-import crelt from '/_m/__/node_modules/crelt/index.js';
-import { setDiagnosticsEffect, diagnosticCount, forEachDiagnostic } from "/_m/__/lint/dist/index.js";
-import { foldEffect, unfoldEffect, foldedRanges, language, highlightingFor } from "/_m/__/language/dist/index.js";
-import { highlightTree } from "/_m/__/node_modules/@lezer/highlight/dist/index.js";
-import { TreeFragment } from '/_m/__/node_modules/@lezer/common/dist/index.js';
+import { Facet, combineConfig, StateField } from '@codemirror/state';
+import { EditorView, ViewPlugin } from '@codemirror/view';
+import crelt from 'crelt';
+import { setDiagnosticsEffect, diagnosticCount, forEachDiagnostic } from '@codemirror/lint';
+import { foldEffect, unfoldEffect, foldedRanges, language, highlightingFor } from '@codemirror/language';
+import { highlightTree } from '@lezer/highlight';
+import { TreeFragment } from '@lezer/common';
+import { searchPanelOpen, getSearchQuery, SearchQuery } from "@codemirror/search";
 
 var __rest = (undefined && undefined.__rest) || function (s, e) {
     var t = {};
@@ -491,16 +492,24 @@ function diagnostics(view) {
     return new DiagnosticState(view);
 }
 
-class SelectionState extends LineBasedState {
+class RangeState extends LineBasedState {
+    ranges = [];
+    loaded = false;
     constructor(view) {
         super(view);
         this.getDrawInfo();
         this._themeClasses = view.dom.classList.value;
+        queueMicrotask(() => this.update({state: view.state}, true));
     }
     shouldUpdate(update) {
         // If the minimap is disabled
         if (!update.state.facet(Config).enabled) {
             return false;
+        }
+        // If the minimap gets first loaded
+        if (!this.loaded) {
+            this.loaded = true;
+            return true;
         }
         // If the doc changed
         if (update.docChanged) {
@@ -520,8 +529,8 @@ class SelectionState extends LineBasedState {
         }
         return false;
     }
-    update(update) {
-        if (!this.shouldUpdate(update)) {
+    update(update, force) {
+        if (!force && !this.shouldUpdate(update)) {
             return;
         }
         this.map.clear();
@@ -530,7 +539,8 @@ class SelectionState extends LineBasedState {
             this._drawInfo = undefined;
             this._themeClasses = this.view.dom.classList.value;
         }
-        const { ranges } = update.state.selection;
+        const ranges = this.getRanges(update);
+        this.ranges = ranges;
         let selectionIndex = 0;
         for (const [index, line] of update.state.field(LinesState).entries()) {
             const selections = [];
@@ -627,7 +637,7 @@ class SelectionState extends LineBasedState {
         }
         // Create a mock selection
         const mockToken = document.createElement("span");
-        mockToken.setAttribute("class", "cm-selectionBackground");
+        mockToken.setAttribute("class", this.styleClass);
         this.view.dom.appendChild(mockToken);
         // Get style information
         const style = window.getComputedStyle(mockToken);
@@ -636,6 +646,170 @@ class SelectionState extends LineBasedState {
         this._drawInfo = result;
         this.view.dom.removeChild(mockToken);
         return result;
+    }
+}
+class OccurrenceState extends RangeState {
+    styleClass = "cm-minimapOccurrenceBackground";
+    getRanges(update) {
+        const state = update.state;
+        const selectionRanges = state.selection.ranges.filter(r => !r.empty);
+        if (selectionRanges.length === 0) return [];
+
+        // Collect selected texts
+        const selectionTexts = selectionRanges.map(r => state.doc.sliceString(r.from, r.to));
+        
+        if (selectionTexts.length != 1) return [];
+        if (!selectionTexts[0].trim()) return [];
+
+        const seen = new Set();
+        const allMatches = [];
+
+        for (const text of selectionTexts) {
+            if (!text || seen.has(text)) continue;
+                seen.add(text);
+
+                // Create a query that finds all literal occurrences of the selected text
+                const query = new SearchQuery({
+                search: text,
+                caseSensitive: true,
+                regexp: false
+            });
+
+            const cursor = query.getCursor(state.doc);
+            for (let m = cursor.next(); !m.done; m = cursor.next()) {
+                const match = { from: m.value.from, to: m.value.to };
+
+                // Exclude any ranges that exactly match the current selection(s)
+                const isInSelection = selectionRanges.some(sel =>
+                    sel.from === match.from && sel.to === match.to
+                );
+                if (!isInSelection) allMatches.push(match);
+            }
+        }
+
+        return allMatches;
+    }
+}
+class SearchSelectionState extends RangeState {
+    styleClass = "cm-minimapSearchSelectionBackground";
+    getRanges = () => [];
+    shouldUpdate(update) {
+        if (super.shouldUpdate(update)) return true;
+
+        // Detect if the search pattern changed
+        const oldQuery = getSearchQuery(update.startState);
+        const newQuery = getSearchQuery(update.state);
+
+        if (
+            oldQuery.search !== newQuery.search ||
+            oldQuery.caseSensitive !== newQuery.caseSensitive ||
+            oldQuery.regexp !== newQuery.regexp
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+}
+class SearchState extends RangeState {
+    styleClass = "cm-minimapSearchBackground";
+    constructor(selection, searchSelection, ...args) {
+        super(...args);
+        this.selection = selection;
+        this.searchSelection = searchSelection;
+    }
+    getRanges(update) {
+        const state = update.state;
+        if (!searchPanelOpen(state)) return [];
+
+        const query = getSearchQuery(state);
+        if (!query || !query.valid) return [];
+
+        const cursor = query.getCursor(state.doc);
+        const ranges = [];
+        const selectionRanges = update.state.selection.ranges;
+        const searchSelectionRanges = [];
+
+        outer: for (let m = cursor.next(); !m.done; m = cursor.next()) {
+            const match = { from: m.value.from, to: m.value.to };
+
+            inner: for (let selectionRange of selectionRanges) {
+                if (match.from === selectionRange.from && match.to === selectionRange.to) {
+                    searchSelectionRanges.push(match);
+                    continue outer;
+                }
+            }
+            ranges.push(match);
+        }
+
+        this.searchSelection.getRanges = () => searchSelectionRanges;
+
+        return ranges;
+    }
+    shouldUpdate(update) {
+        if (super.shouldUpdate(update)) return true;
+
+        // Detect if the search pattern changed
+        const oldQuery = getSearchQuery(update.startState);
+        const newQuery = getSearchQuery(update.state);
+
+        if (
+            oldQuery.search !== newQuery.search ||
+            oldQuery.caseSensitive !== newQuery.caseSensitive ||
+            oldQuery.regexp !== newQuery.regexp
+        ) {
+            return true;
+        }
+
+        // Detect if search panel was opened or closed
+        const oldPanelOpen = searchPanelOpen(update.startState);
+        const newPanelOpen = searchPanelOpen(update.state);
+
+        if (oldPanelOpen !== newPanelOpen) {
+            return true;
+        }
+
+        return false;
+    }
+}
+class SelectionState extends RangeState {
+    styleClass = "cm-minimapSelectionBackground";
+    constructor() {
+        super(...arguments);
+        this.occurrence = new OccurrenceState(...arguments);
+        this.searchSelection = new SearchSelectionState(...arguments);
+        this.search = new SearchState(this, this.searchSelection, ...arguments);
+    }
+    update() {
+        super.update(...arguments);
+        this.occurrence.update(...arguments);
+        this.search.update(...arguments);
+        this.searchSelection.update(...arguments);
+    }
+    drawLine() {
+        super.drawLine(...arguments);
+        this.occurrence.drawLine(...arguments);
+        this.search.drawLine(...arguments);
+        this.searchSelection.drawLine(...arguments);
+    }
+    getRanges(update) {
+        const selectionRanges = update.state.selection.ranges;
+        const ranges = [];
+        const searchSelectionRanges = [];
+
+        outer: for (let selectionRange of selectionRanges) {
+            inner: for (let searchRange of this.search.ranges) {
+                if (searchRange.from === selectionRange.from && searchRange.to === selectionRange.to) {
+                    searchSelectionRanges.push(selectionRange);
+                    continue outer;
+                }
+            }
+            ranges.push(selectionRange)
+        }
+
+        this.searchSelection.getRanges = () => searchSelectionRanges;
+
+        return ranges;
     }
 }
 function selections(view) {
@@ -995,10 +1169,8 @@ const minimapClass = /*@__PURE__*/ViewPlugin.fromClass(class {
         this.text = text(view);
         this.selection = selections(view);
         this.diagnostic = diagnostics(view);
+        if (view.state.facet(showMinimap)) this.create(view);
         this.gutters = {};
-        if (view.state.facet(showMinimap)) {
-            this.create(view);
-        }
         this.view.minimap = this;
     }
     create(view) {
@@ -1030,6 +1202,7 @@ const minimapClass = /*@__PURE__*/ViewPlugin.fromClass(class {
         }
     }
     update(update) {
+        const view = update.view;
         const prev = update.startState.facet(showMinimap);
         const now = update.state.facet(showMinimap);
         if (prev && !now) {
@@ -1037,13 +1210,13 @@ const minimapClass = /*@__PURE__*/ViewPlugin.fromClass(class {
             return;
         }
         if (!prev && now) {
-            this.create(update.view);
+            this.create(view);
         }
         if (now) {
             this.text.update(update);
             this.selection.update(update);
             this.diagnostic.update(update);
-            // this.render();
+            queueMicrotask(() => this.render());
         }
     }
     getWidth() {
@@ -1053,6 +1226,15 @@ const minimapClass = /*@__PURE__*/ViewPlugin.fromClass(class {
             return Scale.MaxWidth * ratio;
         }
         return Scale.MaxWidth;
+    }
+    getVisibleLineIndex(view, pos = view.state.selection.main.head) {
+        const block = view.lineBlockAt(pos);
+        for (let p = 0, i = 1;; i++) {
+            const b = view.lineBlockAt(p);
+            if (b.from === block.from) return i;
+            if (b.to >= view.state.doc.length) break;
+            p = b.to + 1;
+        }
     }
     render() {
         // If we don't have elements to draw to exit early
