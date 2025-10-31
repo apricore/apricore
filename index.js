@@ -59,13 +59,9 @@ app.get("*", (req, res) => {
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            body { font-family: Arial, sans-serif; padding: 2rem; line-height: 1.6; }
-            pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; }
-            code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 3px; }
-          </style>
+          <link rel="stylesheet" href="/qr-admin/markdown.css"/>
         </head>
-        <body>
+        <body class="markdown-body">
           ${marked(buf.toString())}
         </body>
         </html>

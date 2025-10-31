@@ -380,11 +380,11 @@ qr-page[type=css]::before {
   font-family: sans-serif;
   padding-top: 1px;
   font-weight: 600;
-  color: hsl(120, 66.6%, var(--icon-brightness));
+  color: hsl(180, 66.6%, var(--icon-brightness));
 }
 .dark qr-file[type=css] > .file-head::before,
 .dark qr-page[type=css]::before {
-  color: hsl(120, 66.6%, 50%);
+  color: hsl(180, 66.6%, 50%);
 }
 qr-file[type=javascript] > .file-head::before,
 qr-page[type=javascript]::before {
@@ -423,7 +423,7 @@ qr-page[type=pug]::before {
 qr-file[type=markdown] > .file-head::before,
 qr-page[type=markdown]::before {
   content: "\f346";
-  color: hsl(30, 100%, var(--icon-brightness));
+  color: hsl(150, 100%, var(--icon-brightness));
 }
 .dark qr-file[type=markdown] > .file-head::before,
 .dark qr-page[type=markdown]::before {
